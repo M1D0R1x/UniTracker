@@ -9,7 +9,7 @@ const inter = Inter({ subsets: ["latin"] })
 export const metadata = {
   title: "GPA Predictor",
   description: "Calculate your TGPA and CGPA with ease",
-    generator: 'v0.dev'
+    generator: 'M1D0R1x & Junie'
 }
 
 export default function RootLayout({
