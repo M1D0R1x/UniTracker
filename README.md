@@ -1,30 +1,50 @@
-# GPAPredictor
+# UniTracker
 
-*Automatically synced with your [v0.dev](https://v0.dev) deployments*
-
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/m1d0r1xs-projects/v0-gpap-redictor)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.dev-black?style=for-the-badge)](https://v0.dev/chat/projects/pPAvgqraybu)
+A comprehensive university tracking application with tools for students to manage their academic progress.
 
 ## Overview
 
-This repository will stay in sync with your deployed chats on [v0.dev](https://v0.dev).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.dev](https://v0.dev).
+UniTracker provides tools to help university students track their academic performance, including:
+
+- TGPA Calculator: Calculate your Term GPA based on course grades
+
+## TGPA Calculator Features
+
+The TGPA Calculator allows students to:
+
+- Add courses with detailed information (code, name, credits)
+- Specify subject types (ETE with all exams or ETP with no midterm)
+- Enter attendance marks based on attendance percentage
+  - 75% - 79%: 2 marks
+  - 80% - 84%: 3 marks
+  - 85% - 89%: 4 marks
+  - 90% - 94%: 5 marks
+  - 95% - 100%: 6 marks
+- Enter multiple Continuous Assessment (CAS) marks (2, 3, or 4)
+- Select how many CAS marks to count (best 2, best 3, or all 4)
+- View a CAS calculation preview showing how marks are computed
+- Enter midterm marks for ETE subjects (not applicable for ETP subjects)
+- Enter final exam marks
+- Specify maximum marks for each component (CAS, midterm, final exam)
+- View calculated grades on a 10-point scale (O, A+, A, B+, B, C, D, F)
+- View overall TGPA out of 10
+
+## Grading System
+
+- O: 10.0 points (90% and above)
+- A+: 9.0 points (80% - 89%)
+- A: 8.0 points (70% - 79%)
+- B+: 7.0 points (60% - 69%)
+- B: 6.0 points (50% - 59%)
+- C: 5.0 points (45% - 49%)
+- D: 4.0 points (40% - 45%)
+- F: 0.0 points (below 40% or final exam < 40%)
 
 ## Deployment
 
 Your project is live at:
 
-**[https://vercel.com/m1d0r1xs-projects/v0-gpap-redictor](https://vercel.com/m1d0r1xs-projects/v0-gpap-redictor)**
-
+*
 ## Build your app
 
 Continue building your app on:
-
-**[https://v0.dev/chat/projects/pPAvgqraybu](https://v0.dev/chat/projects/pPAvgqraybu)**
-
-## How It Works
-
-1. Create and modify your project using [v0.dev](https://v0.dev)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository

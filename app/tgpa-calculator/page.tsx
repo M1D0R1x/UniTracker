@@ -14,48 +14,124 @@ interface Course {
   code: string
   name: string
   credits: number
+  subjectType: "ETE" | "ETP"  // ETE with all exams, ETP with no midterm
   attendance: number
-  ca: number
-  midterm: number
+  cas: number[]  // Array to store multiple CAS marks (2, 3, or 4)
+  casCount: number  // Number of CAS marks to count (2 or 3)
+  casMaxMarks: number  // Maximum marks for each CAS (default 15)
+  midterm: number | null  // Midterm is null for ETP subjects
+  midtermMaxMarks: number  // Maximum marks for midterm (default 20)
   finalExam: number | null
+  finalExamMaxMarks: number  // Maximum marks for final exam (default 50)
   grade: string
   gradePoint: number
 }
 
 const calculateGradeAndPoints = (
+  subjectType: "ETE" | "ETP",
   attendance: number,
-  ca: number,
-  midterm: number,
+  cas: number[],
+  casCount: number,
+  casMaxMarks: number,
+  midterm: number | null,
+  midtermMaxMarks: number,
   finalExam: number | null,
+  finalExamMaxMarks: number,
 ): { grade: string; gradePoint: number } => {
-  // If final exam is not provided, calculate based on current marks
+  // If final exam is not provided, we can't determine the final grade
   if (finalExam === null) {
-    const currentTotal = attendance + ca + midterm
-    const maxPossibleTotal = currentTotal + 50 // Assuming final exam is worth 50 points
-
-    // Calculate possible grade ranges
-    if (maxPossibleTotal >= 90) return { grade: "A to A+", gradePoint: 4.0 }
-    if (maxPossibleTotal >= 80) return { grade: "A- to A", gradePoint: 3.7 }
-    if (maxPossibleTotal >= 70) return { grade: "B to B+", gradePoint: 3.3 }
-    if (maxPossibleTotal >= 60) return { grade: "B- to C+", gradePoint: 2.7 }
-    if (maxPossibleTotal >= 50) return { grade: "C to C-", gradePoint: 2.0 }
-    return { grade: "D or F", gradePoint: 0.0 }
+    return { grade: "Pending", gradePoint: 0.0 }
   }
 
-  // If final exam is provided, calculate actual grade
-  const total = attendance + ca + midterm + finalExam
+  // Calculate best CAS marks based on the user-selected number to count
+  let bestCasTotal = 0
+  if (cas.length > 0) {
+    // Sort CAS marks in descending order
+    const sortedCas = [...cas].sort((a, b) => b - a)
 
-  if (total >= 90) return { grade: "A+", gradePoint: 4.0 }
-  if (total >= 85) return { grade: "A", gradePoint: 4.0 }
-  if (total >= 80) return { grade: "A-", gradePoint: 3.7 }
-  if (total >= 75) return { grade: "B+", gradePoint: 3.3 }
-  if (total >= 70) return { grade: "B", gradePoint: 3.0 }
-  if (total >= 65) return { grade: "B-", gradePoint: 2.7 }
-  if (total >= 60) return { grade: "C+", gradePoint: 2.3 }
-  if (total >= 55) return { grade: "C", gradePoint: 2.0 }
-  if (total >= 50) return { grade: "C-", gradePoint: 1.7 }
-  if (total >= 45) return { grade: "D+", gradePoint: 1.3 }
-  if (total >= 40) return { grade: "D", gradePoint: 1.0 }
+    // Take the best N marks based on casCount (or all if there are fewer)
+    const casToConsider = sortedCas.slice(0, Math.min(casCount, cas.length))
+
+    // Sum the best CAS marks
+    bestCasTotal = casToConsider.reduce((sum, mark) => sum + mark, 0)
+
+    // Apply ceiling to decimal values (e.g., 15.1 becomes 16)
+    bestCasTotal = Math.ceil(bestCasTotal)
+  }
+
+  // Standard maximum marks for components
+  const standardCasMax = 15; // Standard max for each CAS
+  const standardMidtermMax = 20; // Standard max for midterm
+  const standardFinalExamMax = 50; // Standard max for final exam
+
+  // Scale marks if the exam was conducted for different maximum marks
+  let scaledCasTotal = bestCasTotal;
+  let scaledMidterm = midterm;
+  let scaledFinalExam = finalExam;
+
+  // Scale CAS marks if needed
+  if (casMaxMarks !== standardCasMax && casMaxMarks > 0) {
+    // Scale to standard (e.g., if CAS is out of 10 instead of 15)
+    scaledCasTotal = (bestCasTotal / casMaxMarks) * standardCasMax * cas.length;
+    // Apply ceiling to scaled value
+    scaledCasTotal = Math.ceil(scaledCasTotal);
+  }
+
+  // Scale midterm marks if needed
+  if (midterm !== null && midtermMaxMarks !== standardMidtermMax && midtermMaxMarks > 0) {
+    scaledMidterm = (midterm / midtermMaxMarks) * standardMidtermMax;
+    // Apply ceiling to scaled value
+    scaledMidterm = Math.ceil(scaledMidterm);
+  }
+
+  // Scale final exam marks if needed
+  if (finalExamMaxMarks !== standardFinalExamMax && finalExamMaxMarks > 0) {
+    scaledFinalExam = (finalExam / finalExamMaxMarks) * standardFinalExamMax;
+    // Apply ceiling to scaled value
+    scaledFinalExam = Math.ceil(scaledFinalExam);
+  }
+
+  // Calculate total based on subject type
+  let total = 0;
+  let maxTotal = 0;
+
+  if (subjectType === "ETE") {
+    // For FE subjects: attendance + best CAS + midterm + final
+    total = attendance + scaledCasTotal + (scaledMidterm || 0) + scaledFinalExam;
+
+    // Max possible total for FE subjects
+    // Attendance (max 6) + CAS (max 45 for best 3) + Midterm (max 20) + Final (max 50)
+    maxTotal = 6 + (standardCasMax * 3) + standardMidtermMax + standardFinalExamMax;
+  } else {
+    // For FW subjects: attendance + best CAS + final (no midterm)
+    total = attendance + scaledCasTotal + scaledFinalExam;
+
+    // Max possible total for FW subjects
+    // Attendance (max 6) + CAS (max 45 for best 3) + Final (max 50)
+    maxTotal = 6 + (standardCasMax * 3) + standardFinalExamMax;
+  }
+
+  // Calculate percentage
+  const percentage = (total / maxTotal) * 100;
+
+  // Check pass/fail criteria
+  // 1. Final exam must be >= 40% to pass
+  const finalExamPercentage = (finalExam / finalExamMaxMarks) * 100;
+
+  // 2. Overall percentage must be >= 40 to get a grade
+  if (finalExamPercentage < 40 || percentage < 40) {
+    return { grade: "F", gradePoint: 0.0 }
+  }
+
+  // Assign grade based on percentage using the new grading scale
+  if (percentage >= 90) return { grade: "O", gradePoint: 10.0 }
+  if (percentage >= 80) return { grade: "A+", gradePoint: 9.0 }
+  if (percentage >= 70) return { grade: "A", gradePoint: 8.0 }
+  if (percentage >= 60) return { grade: "B+", gradePoint: 7.0 }
+  if (percentage >= 50) return { grade: "B", gradePoint: 6.0 }
+  if (percentage >= 45) return { grade: "C", gradePoint: 5.0 }
+  if (percentage >= 40) return { grade: "D", gradePoint: 4.0 }
+
   return { grade: "F", gradePoint: 0.0 }
 }
 
@@ -66,10 +142,15 @@ export default function TGPACalculator() {
       code: "CS101",
       name: "Introduction to Programming",
       credits: 4,
-      attendance: 10,
-      ca: 15,
+      subjectType: "ETE",
+      attendance: 5,
+      cas: [15, 12, 14],
+      casCount: 3,
+      casMaxMarks: 15,
       midterm: 20,
+      midtermMaxMarks: 20,
       finalExam: null,
+      finalExamMaxMarks: 50,
       grade: "",
       gradePoint: 0,
     },
@@ -79,18 +160,28 @@ export default function TGPACalculator() {
     code: "",
     name: "",
     credits: 3,
+    subjectType: "ETE",
     attendance: 0,
-    ca: 0,
+    cas: [0, 0, 0, 0],  // Initialize with 4 CAS marks
+    casCount: 3,
+    casMaxMarks: 15,
     midterm: 0,
+    midtermMaxMarks: 20,
     finalExam: null,
+    finalExamMaxMarks: 50,
   })
 
   const addCourse = () => {
     const { grade, gradePoint } = calculateGradeAndPoints(
+      newCourse.subjectType,
       newCourse.attendance,
-      newCourse.ca,
+      newCourse.cas,
+      newCourse.casCount,
+      newCourse.casMaxMarks,
       newCourse.midterm,
+      newCourse.midtermMaxMarks,
       newCourse.finalExam,
+      newCourse.finalExamMaxMarks,
     )
 
     setCourses([
@@ -108,10 +199,15 @@ export default function TGPACalculator() {
       code: "",
       name: "",
       credits: 3,
+      subjectType: "ETE",
       attendance: 0,
-      ca: 0,
+      cas: [0, 0, 0, 0],  // Reset with 4 CAS marks
+      casCount: 3,
+      casMaxMarks: 15,
       midterm: 0,
+      midtermMaxMarks: 20,
       finalExam: null,
+      finalExamMaxMarks: 50,
     })
   }
 
@@ -127,10 +223,15 @@ export default function TGPACalculator() {
 
           // Recalculate grade and grade points
           const { grade, gradePoint } = calculateGradeAndPoints(
+            updatedCourse.subjectType,
             updatedCourse.attendance,
-            updatedCourse.ca,
+            updatedCourse.cas,
+            updatedCourse.casCount,
+            updatedCourse.casMaxMarks,
             updatedCourse.midterm,
+            updatedCourse.midtermMaxMarks,
             updatedCourse.finalExam,
+            updatedCourse.finalExamMaxMarks,
           )
 
           return { ...updatedCourse, grade, gradePoint }
@@ -170,10 +271,17 @@ export default function TGPACalculator() {
                       <TableHead>Course Code</TableHead>
                       <TableHead>Course Name</TableHead>
                       <TableHead>Credits</TableHead>
+                      <TableHead>Type</TableHead>
                       <TableHead>Attendance</TableHead>
-                      <TableHead>CA</TableHead>
+                      <TableHead>CAS Marks</TableHead>
+                      <TableHead>CAS Count</TableHead>
+                      <TableHead>Converted CA</TableHead>
+                      <TableHead>CAS Max</TableHead>
                       <TableHead>Midterm</TableHead>
+                      <TableHead>Mid Max</TableHead>
                       <TableHead>Final Exam</TableHead>
+                      <TableHead>Final Max</TableHead>
+                      <TableHead>Total Marks</TableHead>
                       <TableHead>Grade</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
@@ -211,6 +319,20 @@ export default function TGPACalculator() {
                           </Select>
                         </TableCell>
                         <TableCell>
+                          <Select
+                            value={course.subjectType}
+                            onValueChange={(value) => updateCourse(course.id, "subjectType", value as "FE" | "FW")}
+                          >
+                            <SelectTrigger className="w-20">
+                              <SelectValue placeholder="Type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="ETE">ETE (All Exams)</SelectItem>
+                              <SelectItem value="ETP">ETP (No Midterm)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
                           <Input
                             type="number"
                             min="0"
@@ -223,24 +345,109 @@ export default function TGPACalculator() {
                           />
                         </TableCell>
                         <TableCell>
-                          <Input
-                            type="number"
-                            min="0"
-                            max="20"
-                            value={course.ca}
-                            onChange={(e) => updateCourse(course.id, "ca", Number.parseInt(e.target.value) || 0)}
-                            className="w-16"
-                          />
+                          <div className="flex flex-col space-y-1">
+                            {course.cas.map((cas, index) => (
+                              <Input
+                                key={index}
+                                type="number"
+                                min="0"
+                                max="15"
+                                value={cas}
+                                onChange={(e) => {
+                                  const newCas = [...course.cas];
+                                  newCas[index] = Number.parseInt(e.target.value) || 0;
+                                  updateCourse(course.id, "cas", newCas);
+                                }}
+                                className="w-16"
+                              />
+                            ))}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Select
+                            value={course.casCount.toString()}
+                            onValueChange={(value) => updateCourse(course.id, "casCount", Number.parseInt(value))}
+                          >
+                            <SelectTrigger className="w-16">
+                              <SelectValue placeholder="Count" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="2">2</SelectItem>
+                              <SelectItem value="3">3</SelectItem>
+                              <SelectItem value="4">4</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          {(() => {
+                            // Sort CAS marks in descending order
+                            const sortedCas = [...course.cas].sort((a, b) => b - a);
+
+                            // Take the best N marks based on casCount
+                            const casToConsider = sortedCas.slice(0, Math.min(course.casCount, course.cas.length));
+
+                            // Sum the best CAS marks
+                            const bestCasTotal = casToConsider.reduce((sum, mark) => sum + mark, 0);
+
+                            // Calculate converted CA score
+                            let convertedCA = bestCasTotal;
+                            if (course.casCount === 2) {
+                              // For 2 CAS: add marks, divide by 60, multiply by max CA marks, take ceiling
+                              convertedCA = Math.ceil((bestCasTotal / 60) * course.casMaxMarks);
+                            } else {
+                              // For other cases, calculate proportionally
+                              const totalPossible = course.casCount * 15; // Assuming each CAS is out of 15
+                              convertedCA = Math.ceil((bestCasTotal / totalPossible) * course.casMaxMarks);
+                            }
+
+                            return convertedCA;
+                          })()}
                         </TableCell>
                         <TableCell>
                           <Input
                             type="number"
-                            min="0"
-                            max="20"
-                            value={course.midterm}
-                            onChange={(e) => updateCourse(course.id, "midterm", Number.parseInt(e.target.value) || 0)}
+                            min="1"
+                            value={course.casMaxMarks}
+                            onChange={(e) =>
+                              updateCourse(course.id, "casMaxMarks", Number.parseInt(e.target.value) || 15)
+                            }
                             className="w-16"
                           />
+                        </TableCell>
+                        <TableCell>
+                          {course.subjectType === "ETE" ? (
+                            <Input
+                              type="number"
+                              min="0"
+                              max="20"
+                              value={course.midterm === null ? "" : course.midterm}
+                              onChange={(e) =>
+                                updateCourse(
+                                  course.id,
+                                  "midterm",
+                                  e.target.value === "" ? null : Number.parseInt(e.target.value) || 0
+                                )
+                              }
+                              className="w-16"
+                            />
+                          ) : (
+                            <span className="text-muted-foreground">N/A</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {course.subjectType === "ETE" ? (
+                            <Input
+                              type="number"
+                              min="1"
+                              value={course.midtermMaxMarks}
+                              onChange={(e) =>
+                                updateCourse(course.id, "midtermMaxMarks", Number.parseInt(e.target.value) || 20)
+                              }
+                              className="w-16"
+                            />
+                          ) : (
+                            <span className="text-muted-foreground">N/A</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <Input
@@ -258,6 +465,40 @@ export default function TGPACalculator() {
                             placeholder="N/A"
                             className="w-16"
                           />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={course.finalExamMaxMarks}
+                            onChange={(e) =>
+                              updateCourse(course.id, "finalExamMaxMarks", Number.parseInt(e.target.value) || 50)
+                            }
+                            className="w-16"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          {(() => {
+                            // Calculate converted CA score
+                            const sortedCas = [...course.cas].sort((a, b) => b - a);
+                            const casToConsider = sortedCas.slice(0, Math.min(course.casCount, course.cas.length));
+                            const bestCasTotal = casToConsider.reduce((sum, mark) => sum + mark, 0);
+
+                            let convertedCA = bestCasTotal;
+                            if (course.casCount === 2) {
+                              convertedCA = Math.ceil((bestCasTotal / 60) * course.casMaxMarks);
+                            } else {
+                              const totalPossible = course.casCount * 15;
+                              convertedCA = Math.ceil((bestCasTotal / totalPossible) * course.casMaxMarks);
+                            }
+
+                            // Calculate total marks
+                            const midtermMarks = course.subjectType === "ETE" && course.midterm !== null ? course.midterm : 0;
+                            const finalExamMarks = course.finalExam !== null ? course.finalExam : 0;
+                            const totalMarks = course.attendance + convertedCA + midtermMarks + finalExamMarks;
+
+                            return totalMarks;
+                          })()}
                         </TableCell>
                         <TableCell>{course.grade}</TableCell>
                         <TableCell>
@@ -311,40 +552,252 @@ export default function TGPACalculator() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div>
-                      <Label htmlFor="attendance">Attendance</Label>
-                      <Input
-                        id="attendance"
-                        type="number"
-                        min="0"
-                        max="10"
-                        value={newCourse.attendance}
-                        onChange={(e) =>
-                          setNewCourse({ ...newCourse, attendance: Number.parseInt(e.target.value) || 0 })
+                  <div>
+                    <Label htmlFor="subjectType">Subject Type</Label>
+                    <Select
+                      value={newCourse.subjectType}
+                      onValueChange={(value) => {
+                        // If changing from ETE to ETP, set midterm to null
+                        if (value === "ETP") {
+                          setNewCourse({ ...newCourse, subjectType: value as "ETE" | "ETP", midterm: null });
+                        } else {
+                          setNewCourse({ ...newCourse, subjectType: value as "ETE" | "ETP" });
                         }
+                      }}
+                    >
+                      <SelectTrigger id="subjectType">
+                        <SelectValue placeholder="Subject Type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ETE">ETE (All Exams)</SelectItem>
+                        <SelectItem value="ETP">ETP (No Midterm)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="attendance">Attendance</Label>
+                    <Select
+                      value={newCourse.attendance.toString()}
+                      onValueChange={(value) => setNewCourse({ ...newCourse, attendance: Number.parseInt(value) })}
+                    >
+                      <SelectTrigger id="attendance">
+                        <SelectValue placeholder="Attendance" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="0">Below 75%</SelectItem>
+                        <SelectItem value="2">75% - 79%</SelectItem>
+                        <SelectItem value="3">80% - 84%</SelectItem>
+                        <SelectItem value="4">85% - 89%</SelectItem>
+                        <SelectItem value="5">90% - 94%</SelectItem>
+                        <SelectItem value="6">95% - 100%</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="casCount">Number of CAS</Label>
+                      <Select
+                        value={newCourse.cas.length.toString()}
+                        onValueChange={(value) => {
+                          const count = Number.parseInt(value);
+                          // Create a new array with the specified length, preserving existing values
+                          const newCas = Array(count).fill(0).map((_, i) => 
+                            i < newCourse.cas.length ? newCourse.cas[i] : 0
+                          );
+                          setNewCourse({ ...newCourse, cas: newCas });
+                        }}
+                      >
+                        <SelectTrigger id="casCount">
+                          <SelectValue placeholder="Number of CAS" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="2">2</SelectItem>
+                          <SelectItem value="3">3</SelectItem>
+                          <SelectItem value="4">4</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="casCountUsed">CAS Marks to Count</Label>
+                      <Select
+                        value={newCourse.casCount.toString()}
+                        onValueChange={(value) => {
+                          setNewCourse({ ...newCourse, casCount: Number.parseInt(value) });
+                        }}
+                      >
+                        <SelectTrigger id="casCountUsed">
+                          <SelectValue placeholder="CAS to Count" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="2">Best 2</SelectItem>
+                          <SelectItem value="3">Best 3</SelectItem>
+                          <SelectItem value="4">All 4</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>CAS Marks</Label>
+                      <div className="grid grid-cols-4 gap-2 mt-2">
+                        {newCourse.cas.map((cas, index) => (
+                          <Input
+                            key={index}
+                            type="number"
+                            min="0"
+                            max="15"
+                            value={cas}
+                            onChange={(e) => {
+                              const newCas = [...newCourse.cas];
+                              newCas[index] = Number.parseInt(e.target.value) || 0;
+                              setNewCourse({ ...newCourse, cas: newCas });
+                            }}
+                            placeholder={`CAS ${index + 1}`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <Label htmlFor="casMaxMarks">CAS Max Marks</Label>
+                      <Input
+                        id="casMaxMarks"
+                        type="number"
+                        min="1"
+                        value={newCourse.casMaxMarks}
+                        onChange={(e) => 
+                          setNewCourse({ 
+                            ...newCourse, 
+                            casMaxMarks: Number.parseInt(e.target.value) || 15 
+                          })
+                        }
+                        placeholder="Max marks for each CAS"
+                      />
+                    </div>
+                  </div>
+                  <div className="border p-3 rounded-md bg-muted/50">
+                    <Label className="mb-2 block">CAS Calculation Preview</Label>
+                    <div className="text-sm space-y-1">
+                      {(() => {
+                        // Sort CAS marks in descending order
+                        const sortedCas = [...newCourse.cas].sort((a, b) => b - a);
+
+                        // Take the best N marks based on casCount (or all if there are fewer)
+                        const casToConsider = sortedCas.slice(0, Math.min(newCourse.casCount, newCourse.cas.length));
+
+                        // Sum the best CAS marks
+                        const bestCasTotal = Math.ceil(casToConsider.reduce((sum, mark) => sum + mark, 0));
+
+                        // Calculate scaled CAS total if needed
+                        const standardCasMax = 15;
+                        let scaledCasTotal = bestCasTotal;
+
+                        if (newCourse.casMaxMarks !== standardCasMax && newCourse.casMaxMarks > 0) {
+                          // Scale to standard (e.g., if CAS is out of 10 instead of 15)
+                          scaledCasTotal = Math.ceil((bestCasTotal / newCourse.casMaxMarks) * standardCasMax * casToConsider.length);
+                        }
+
+                        return (
+                          <>
+                            <p><strong>CAS Marks:</strong> {newCourse.cas.join(', ')}</p>
+                            <p><strong>Considering:</strong> {newCourse.casCount === 4 ? 'All 4' : `Best ${newCourse.casCount}`} CAS marks</p>
+                            <p><strong>Selected CAS Marks:</strong> {casToConsider.join(', ')}</p>
+                            <p><strong>Total CAS Marks:</strong> {bestCasTotal} out of {newCourse.casMaxMarks * casToConsider.length}</p>
+
+                            {/* Calculate and display converted CA score */}
+                            {(() => {
+                              let convertedCA = bestCasTotal;
+                              if (newCourse.casCount === 2) {
+                                // For 2 CAS: add marks, divide by 60, multiply by max CA marks, take ceiling
+                                convertedCA = Math.ceil((bestCasTotal / 60) * newCourse.casMaxMarks);
+                                return (
+                                  <p><strong>Converted CA Score:</strong> {convertedCA} (calculated as: ceil({bestCasTotal}/60 × {newCourse.casMaxMarks}))</p>
+                                );
+                              } else {
+                                // For other cases, calculate proportionally
+                                const totalPossible = newCourse.casCount * 15;
+                                convertedCA = Math.ceil((bestCasTotal / totalPossible) * newCourse.casMaxMarks);
+                                return (
+                                  <p><strong>Converted CA Score:</strong> {convertedCA} (calculated as: ceil({bestCasTotal}/{totalPossible} × {newCourse.casMaxMarks}))</p>
+                                );
+                              }
+                            })()}
+
+                            {newCourse.casMaxMarks !== standardCasMax && (
+                              <p><strong>Scaled CAS Marks:</strong> {scaledCasTotal} (scaled to standard)</p>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                  {newCourse.subjectType === "ETE" && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="midterm">Midterm</Label>
+                        <Input
+                          id="midterm"
+                          type="number"
+                          min="0"
+                          max="20"
+                          value={newCourse.midterm === null ? "" : newCourse.midterm}
+                          onChange={(e) => 
+                            setNewCourse({ 
+                              ...newCourse, 
+                              midterm: e.target.value === "" ? null : Number.parseInt(e.target.value) || 0 
+                            })
+                          }
+                          placeholder="Midterm marks"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="midtermMaxMarks">Midterm Max Marks</Label>
+                        <Input
+                          id="midtermMaxMarks"
+                          type="number"
+                          min="1"
+                          value={newCourse.midtermMaxMarks}
+                          onChange={(e) => 
+                            setNewCourse({ 
+                              ...newCourse, 
+                              midtermMaxMarks: Number.parseInt(e.target.value) || 20 
+                            })
+                          }
+                          placeholder="Max marks for midterm"
+                        />
+                      </div>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="finalExam">Final Exam</Label>
+                      <Input
+                        id="finalExam"
+                        type="number"
+                        min="0"
+                        value={newCourse.finalExam === null ? "" : newCourse.finalExam}
+                        onChange={(e) => 
+                          setNewCourse({ 
+                            ...newCourse, 
+                            finalExam: e.target.value === "" ? null : Number.parseInt(e.target.value) || 0 
+                          })
+                        }
+                        placeholder="Final exam marks"
                       />
                     </div>
                     <div>
-                      <Label htmlFor="ca">CA</Label>
+                      <Label htmlFor="finalExamMaxMarks">Final Exam Max Marks</Label>
                       <Input
-                        id="ca"
+                        id="finalExamMaxMarks"
                         type="number"
-                        min="0"
-                        max="20"
-                        value={newCourse.ca}
-                        onChange={(e) => setNewCourse({ ...newCourse, ca: Number.parseInt(e.target.value) || 0 })}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="midterm">Midterm</Label>
-                      <Input
-                        id="midterm"
-                        type="number"
-                        min="0"
-                        max="20"
-                        value={newCourse.midterm}
-                        onChange={(e) => setNewCourse({ ...newCourse, midterm: Number.parseInt(e.target.value) || 0 })}
+                        min="1"
+                        value={newCourse.finalExamMaxMarks}
+                        onChange={(e) => 
+                          setNewCourse({ 
+                            ...newCourse, 
+                            finalExamMaxMarks: Number.parseInt(e.target.value) || 50 
+                          })
+                        }
+                        placeholder="Max marks for final exam"
                       />
                     </div>
                   </div>
@@ -367,7 +820,8 @@ export default function TGPACalculator() {
             <CardContent>
               <div className="text-center">
                 <div className="text-6xl font-bold mb-2">{tgpa.toFixed(2)}</div>
-                <p className="text-muted-foreground">
+                <p className="text-sm font-medium">Out of 10.0</p>
+                <p className="text-muted-foreground mt-2">
                   Based on {courses.length} course{courses.length !== 1 ? "s" : ""}
                 </p>
               </div>
@@ -375,7 +829,7 @@ export default function TGPACalculator() {
               <div className="mt-6">
                 <h3 className="font-medium mb-2">Grade Distribution</h3>
                 <div className="space-y-2">
-                  {["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "F"].map((grade) => {
+                  {["O", "A+", "A", "B+", "B", "C", "D", "F"].map((grade) => {
                     const count = courses.filter((c) => c.grade === grade).length
                     if (count === 0) return null
 
